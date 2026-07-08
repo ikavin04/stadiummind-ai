@@ -1,0 +1,124 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Base Reset ─── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-bg-base text-text-primary;
+    background-image: radial-gradient(circle at 50% 0%, rgba(0,226,138,0.06) 0%, transparent 55%);
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-bg-surface; }
+  ::-webkit-scrollbar-thumb { @apply bg-bg-border rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-text-muted; }
+
+  ::selection { background: rgba(0,226,138,0.25); }
+}
+
+/* ─── Component Layer ─── */
+@layer components {
+  /* Glass card */
+  .glass-card {
+    @apply bg-glass border border-bg-border rounded-2xl backdrop-blur-xl;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* Status severity chips */
+  .severity-normal  { @apply bg-accent-green/10 text-accent-green border border-accent-green/25; }
+  .severity-watch   { @apply bg-accent-amber/10 text-accent-amber border border-accent-amber/25; }
+  .severity-alert   { @apply bg-accent-red/10   text-accent-red   border border-accent-red/25; }
+
+  /* Occupancy bar */
+  .occ-bar-fill-normal { @apply bg-accent-green; }
+  .occ-bar-fill-watch  { background: linear-gradient(90deg, #F2A623, #e8960f); }
+  .occ-bar-fill-alert  { background: linear-gradient(90deg, #E24B4A, #c43b3a); }
+
+  /* Glowing dot */
+  .live-dot {
+    @apply w-2 h-2 rounded-full bg-accent-green;
+    box-shadow: 0 0 6px rgba(0,226,138,0.8);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  /* Button variants */
+  .btn-primary {
+    @apply px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-200;
+    @apply bg-accent-green text-bg-base hover:opacity-90 active:scale-95;
+    box-shadow: 0 0 16px rgba(0,226,138,0.2);
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200;
+    @apply text-text-secondary border border-bg-border hover:border-accent-green/40 hover:text-text-primary bg-transparent;
+  }
+
+  /* Nav item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 cursor-pointer;
+    @apply text-text-secondary hover:text-text-primary hover:bg-white/5;
+  }
+
+  .nav-item.active {
+    @apply text-accent-green bg-accent-green/10;
+  }
+
+  /* Chat bubbles */
+  .chat-bubble-user {
+    @apply bg-accent-green/15 border border-accent-green/20 text-text-primary rounded-2xl rounded-br-sm px-4 py-3 max-w-[80%] ml-auto;
+  }
+
+  .chat-bubble-assistant {
+    @apply bg-bg-card border border-bg-border text-text-primary rounded-2xl rounded-bl-sm px-4 py-3 max-w-[80%];
+  }
+
+  /* Input */
+  .input-field {
+    @apply w-full bg-bg-card border border-bg-border rounded-xl px-4 py-3 text-sm text-text-primary;
+    @apply placeholder:text-text-muted focus:outline-none focus:border-accent-green/50 transition-colors duration-200;
+  }
+
+  /* Stat card number */
+  .stat-value {
+    @apply text-3xl font-bold tracking-tight text-text-primary;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Roadmap badge */
+  .planned-badge {
+    @apply text-xs font-semibold px-2 py-0.5 rounded-full border;
+    @apply text-text-muted border-bg-border bg-bg-surface;
+  }
+}
+
+/* ─── Utility Animations ─── */
+@layer utilities {
+  .animate-slide-in-right { animation: slideInRight 0.35s ease-out forwards; }
+  .animate-slide-in-up    { animation: slideInUp    0.3s  ease-out forwards; }
+  .animate-fade-in        { animation: fadeIn       0.25s ease-out forwards; }
+
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes slideInUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+}

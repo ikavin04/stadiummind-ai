@@ -1,0 +1,47 @@
+import type { Severity } from '../types';
+import { cn } from '../lib/utils';
+
+const SEVERITY_STYLES: Record<Severity, string> = {
+  normal: 'severity-normal',
+  watch:  'severity-watch',
+  alert:  'severity-alert',
+};
+
+const SEVERITY_LABELS: Record<Severity, string> = {
+  normal: 'Normal',
+  watch:  'Watch',
+  alert:  'Alert',
+};
+
+interface SeverityBadgeProps {
+  severity: Severity;
+  className?: string;
+  pulse?: boolean;
+}
+
+export function SeverityBadge({ severity, className, pulse }: SeverityBadgeProps) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border',
+        SEVERITY_STYLES[severity],
+        className
+      )}
+    >
+      {pulse && <span className="live-dot w-1.5 h-1.5" />}
+      {SEVERITY_LABELS[severity]}
+    </span>
+  );
+}
+
+interface PlannedBadgeProps {
+  className?: string;
+}
+
+export function PlannedBadge({ className }: PlannedBadgeProps) {
+  return (
+    <span className={cn('planned-badge', className)}>
+      Planned
+    </span>
+  );
+}
