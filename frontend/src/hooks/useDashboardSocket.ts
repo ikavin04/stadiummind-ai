@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { DashboardSummary, WSEvent, Zone, DashboardAlert, CrowdPrediction } from '../types';
 
-const WS_BASE = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000';
+const WS_BASE = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8001';
 const PING_INTERVAL = 25_000;  // 25s keepalive
 const RECONNECT_DELAY = 3_000; // 3s before reconnect
 
