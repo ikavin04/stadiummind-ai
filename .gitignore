@@ -23,8 +23,9 @@ htmlcov/
 # FastAPI / Uvicorn
 *.log
 
-# Environment variables
+# Environment variables — NEVER commit secrets
 .env
+.env.local
 .env.*
 !.env.example
 
@@ -39,22 +40,30 @@ frontend/build/
 # Vite
 frontend/.vite/
 
-# IDEs
+# FAISS / generated indexes (rebuilt from seed_data.py at startup, not committed)
+*.faiss
+*.index
+backend/faiss_index/
+backend/app/data/faiss_index/
+
+# IDEs / editors
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+
+# OS
 .DS_Store
 Thumbs.db
 
-# FAISS index
-*.faiss
-*.index
-backend/faiss_index/
+# Alembic compiled
+backend/alembic/versions/*.pyc
 
 # Docker
 .docker/
 
-# Alembic
-backend/alembic/versions/*.pyc
+# Demo assets — host externally, link in README instead
+*.mp4
+*.mov
+demo-assets/
