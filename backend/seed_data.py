@@ -151,32 +151,38 @@ async def seed():
                 zone = Zone(**z)
                 session.add(zone)
             await session.commit()
-            print(f"✅ Seeded {len(ZONES)} zones")
+            print(f"[OK] Seeded {len(ZONES)} zones")
         else:
-            print("⏭️  Zones already seeded")
+            print("[INFO] Zones already seeded")
 
         # Seed knowledge chunks
         existing_chunks = await session.execute(select(KnowledgeChunk))
-        if not existing_chunks.scalars().all():
+        has_chunks = len(existing_chunks.scalars().all()) > 0
+        if not has_chunks:
             for chunk in KNOWLEDGE_CHUNKS:
                 kc = KnowledgeChunk(**chunk)
                 session.add(kc)
             await session.commit()
-            print(f"✅ Seeded {len(KNOWLEDGE_CHUNKS)} knowledge chunks")
+            print(f"[OK] Seeded {len(KNOWLEDGE_CHUNKS)} knowledge chunks")
+        else:
+            print("[INFO] Knowledge chunks already seeded")
 
-            # Build FAISS index if Gemini key available
-            settings = get_settings()
-            if settings.gemini_api_key:
-                print("🔨 Building FAISS index (this may take a moment)...")
+        # Build/Rebuild FAISS index if index file is missing on disk
+        import os
+        from app.services.fan_assistant import FAISS_INDEX_PATH
+        settings = get_settings()
+        if settings.gemini_api_key:
+            if not os.path.exists(FAISS_INDEX_PATH):
+                print("[BUILD] Rebuilding FAISS index from seeded database...")
                 from app.services.fan_assistant import build_faiss_index
                 await build_faiss_index()
-                print("✅ FAISS index built")
+                print("[OK] FAISS index built successfully")
             else:
-                print("⚠️  No Gemini API key — FAISS index not built. Set GEMINI_API_KEY and re-run seed.")
+                print("[INFO] FAISS index already exists on disk")
         else:
-            print("⏭️  Knowledge chunks already seeded")
+            print("[WARN] No Gemini API key — FAISS index build skipped.")
 
-    print("\n🏟️ StadiumMind AI seed complete!")
+    print("\n[DONE] StadiumMind AI seed complete!")
 
 
 if __name__ == "__main__":

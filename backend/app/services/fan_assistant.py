@@ -29,13 +29,13 @@ def _ensure_faiss_dir():
     os.makedirs("faiss_index", exist_ok=True)
 
 
-def _get_embedding(text: str) -> np.ndarray:
-    """Get Gemini text embedding."""
-    settings = get_settings()
+def _get_embedding(text: str, task_type: str = "RETRIEVAL_QUERY") -> np.ndarray:
+    """Get Gemini text embedding using gemini-embedding-001 with custom dimensionality."""
     result = genai.embed_content(
-        model="models/text-embedding-004",
+        model="models/gemini-embedding-001",
         content=text,
-        task_type="retrieval_query",
+        task_type=task_type,
+        output_dimensionality=768,
     )
     return np.array(result["embedding"], dtype=np.float32)
 
@@ -83,10 +83,10 @@ async def build_faiss_index():
 
     for chunk in chunks:
         try:
-            embedding = await asyncio.to_thread(_get_embedding, chunk.content)
+            embedding = await asyncio.to_thread(_get_embedding, chunk.content, "RETRIEVAL_DOCUMENT")
             embeddings.append(embedding)
             metadata.append({
-                "id": chunk.id,
+                "id": str(chunk.id),
                 "content": chunk.content,
                 "topic": chunk.topic,
             })
@@ -124,7 +124,7 @@ async def retrieve_relevant_chunks(query: str, top_k: int = 4) -> list[str]:
 
     import faiss
     try:
-        query_embedding = await asyncio.to_thread(_get_embedding, query)
+        query_embedding = await asyncio.to_thread(_get_embedding, query, "RETRIEVAL_QUERY")
         query_vec = query_embedding.reshape(1, -1)
         faiss.normalize_L2(query_vec)
 
