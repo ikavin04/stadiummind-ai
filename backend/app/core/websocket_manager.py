@@ -7,6 +7,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+from fastapi.encoders import jsonable_encoder
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
@@ -23,7 +25,8 @@ class ConnectionManager:
 
     async def broadcast(self, data: dict[str, Any]):
         """Broadcast JSON data to all connected clients."""
-        message = json.dumps(data)
+        encoded_data = jsonable_encoder(data)
+        message = json.dumps(encoded_data)
         disconnected = []
         for connection in self.active_connections:
             try:
@@ -36,7 +39,8 @@ class ConnectionManager:
 
     async def send_personal(self, websocket: WebSocket, data: dict[str, Any]):
         """Send a message to a single connection."""
-        await websocket.send_text(json.dumps(data))
+        encoded_data = jsonable_encoder(data)
+        await websocket.send_text(json.dumps(encoded_data))
 
 
 # Singleton instance shared across routers

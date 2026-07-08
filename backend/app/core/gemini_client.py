@@ -18,23 +18,10 @@ def _init_genai():
 _init_genai()
 
 CROWD_PREDICTION_PROMPT = """You are an AI crowd management system for a FIFA World Cup 2026 stadium.
-Analyze the following zone data and respond with ONLY a valid JSON object — no markdown, no explanation.
+Analyze the following zone data and predict crowd overcapacity risks.
 
 Zone data:
 {zone_summary}
-
-Required JSON response format:
-{{
-  "minutes_until_overcapacity": <integer or null if not trending toward overcapacity>,
-  "confidence": <float between 0.0 and 1.0>,
-  "recommended_action": "<specific actionable recommendation for stadium staff>",
-  "severity": "<normal|watch|alert>"
-}}
-
-Rules:
-- severity is "normal" if occupancy < 70%, "watch" if 70-90%, "alert" if >90% or overcapacity imminent
-- Be specific in recommended_action (mention zone names, directions, staff actions)
-- If the zone is not trending toward overcapacity, set minutes_until_overcapacity to null
 """
 
 FAN_ASSISTANT_SYSTEM_PROMPT = """You are StadiumMind, the official AI assistant for FIFA World Cup 2026 stadiums.
@@ -81,6 +68,7 @@ class GeminiClient:
         Send zone data to Gemini and get a structured crowd prediction.
         Retries once on malformed JSON response.
         """
+        from app.schemas import GeminiPredictionResponse
         prompt = CROWD_PREDICTION_PROMPT.format(zone_summary=json.dumps(zone_summary, indent=2))
         model = self._get_prediction_model()
 
@@ -91,16 +79,12 @@ class GeminiClient:
                     prompt,
                     generation_config=genai.types.GenerationConfig(
                         temperature=0.3,
-                        max_output_tokens=512,
+                        max_output_tokens=2048,
+                        response_mime_type="application/json",
+                        response_schema=GeminiPredictionResponse,
                     ),
                 )
                 raw = response.text.strip()
-                # Strip potential markdown code fences
-                if raw.startswith("```"):
-                    raw = raw.split("```")[1]
-                    if raw.startswith("json"):
-                        raw = raw[4:]
-                raw = raw.strip()
                 result = json.loads(raw)
                 # Validate required keys
                 required = {"minutes_until_overcapacity", "confidence", "recommended_action", "severity"}
@@ -108,7 +92,8 @@ class GeminiClient:
                     raise ValueError(f"Missing keys: {required - result.keys()}")
                 return result
             except Exception as e:
-                logger.warning(f"Gemini prediction attempt {attempt + 1} failed: {e}")
+                raw_resp = response.text if 'response' in locals() else 'None'
+                logger.warning(f"Gemini prediction attempt {attempt + 1} failed: {e}. Raw response: {raw_resp}")
                 if attempt == 1:
                     return None
         return None

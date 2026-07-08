@@ -76,8 +76,20 @@ async def predict_for_zone(zone_id: str, current_count: int) -> dict | None:
             ],
         }
 
-        # Call Gemini
-        gemini_result = await gemini_client.generate_crowd_prediction(zone_summary)
+        occupancy_pct = zone_summary["occupancy_pct"]
+        trend = zone_summary["trend"]
+
+        # Smart Rate-Limit Guard: If occupancy is normal (< 70%) and not rising, skip Gemini call
+        if occupancy_pct < 70.0 and trend != "rising":
+            gemini_result = {
+                "minutes_until_overcapacity": None,
+                "confidence": 1.0,
+                "recommended_action": "Traffic flow is normal. Standard monitoring in progress.",
+                "severity": "normal"
+            }
+        else:
+            # Call Gemini
+            gemini_result = await gemini_client.generate_crowd_prediction(zone_summary)
 
         if gemini_result is None:
             # Fallback to cache

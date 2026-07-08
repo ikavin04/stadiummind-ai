@@ -48,12 +48,12 @@ class CrowdPredictionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# Pydantic model for Gemini's structured output
+# Pydantic model for Gemini's structured output (no defaults or Field constraints to avoid Google SDK error)
 class GeminiPredictionResponse(BaseModel):
-    minutes_until_overcapacity: Optional[int] = None
-    confidence: float = Field(ge=0.0, le=1.0)
+    minutes_until_overcapacity: Optional[int]
+    confidence: float
     recommended_action: str
-    severity: str = "normal"
+    severity: str
 
 
 # ─────────────────────────────────────────
