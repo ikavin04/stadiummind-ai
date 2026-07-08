@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     gemini_prediction_model: str = "gemini-2.5-flash"
     gemini_chat_model: str = "gemini-2.5-flash"
     use_mock_gemini: bool = True
+    gemini_budget_limit: int = 15
 
     # Firebase
     firebase_project_id: str = ""

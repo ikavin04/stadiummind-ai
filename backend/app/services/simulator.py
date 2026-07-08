@@ -100,8 +100,8 @@ async def run_simulation():
             updates = await tick_once()
             if updates:
                 # Import here to avoid circular imports at module level
-                from app.services.crowd_predictor import run_predictions_for_updates
-                await run_predictions_for_updates(updates)
+                from app.services.crowd_predictor import run_local_updates_for_simulation
+                await run_local_updates_for_simulation(updates)
         except Exception as e:
             logger.error(f"Simulation tick error: {e}", exc_info=True)
 

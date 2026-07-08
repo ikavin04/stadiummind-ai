@@ -172,22 +172,20 @@ async def predict_for_zones_batch(updates: dict[str, int]) -> list[dict]:
             occupancy_pct = round((current_count / zone.capacity) * 100, 1)
             trend = _compute_trend(readings)
 
+            # Format recent readings with count and minutes_ago
+            recent_readings_formatted = []
+            for r in readings:
+                minutes_ago = int((datetime.now(timezone.utc) - r.recorded_at).total_seconds() / 60) if r.recorded_at else 0
+                recent_readings_formatted.append({
+                    "count": r.current_count,
+                    "minutes_ago": max(0, minutes_ago)
+                })
+
             zone_summary = {
                 "zone_id": zone_id,
                 "zone_name": zone.name,
-                "zone_type": zone.zone_type,
                 "capacity": zone.capacity,
-                "current_count": current_count,
-                "occupancy_pct": occupancy_pct,
-                "trend": trend,
-                "recent_readings": [
-                    {
-                        "count": r.current_count,
-                        "recorded_at": r.recorded_at.isoformat() if r.recorded_at else None,
-                        "occupancy_pct": round((r.current_count / zone.capacity) * 100, 1),
-                    }
-                    for r in readings
-                ],
+                "recent_readings": recent_readings_formatted,
             }
 
             # Smart Rate-Limit Guard: Low occupancy and stable trend -> local prediction directly
@@ -218,8 +216,8 @@ async def predict_for_zones_batch(updates: dict[str, int]) -> list[dict]:
         for item in gemini_batch_input:
             zone_id = item["zone_id"]
             zone = zones[zone_id]
-            current_count = item["current_count"]
-            occupancy_pct = item["occupancy_pct"]
+            current_count = updates[zone_id]
+            occupancy_pct = round((current_count / zone.capacity) * 100, 1)
 
             gemini_res = gemini_by_zone.get(zone_id)
             if gemini_res is None:
@@ -347,3 +345,45 @@ async def get_latest_predictions_all() -> list[dict]:
                 "created_at": pred.created_at.isoformat() if pred.created_at else None,
             })
         return predictions
+
+
+async def run_local_updates_for_simulation(updates: dict[str, int]):
+    """
+    Called during the background simulation tick. Broadcasts new zone counts,
+    occupancies, and severities, but does NOT trigger Gemini or save new predictions.
+    """
+    async with AsyncSessionLocal() as session:
+        # Fetch relevant zones
+        result = await session.execute(select(Zone).where(Zone.id.in_([uuid.UUID(k) if isinstance(k, str) else k for k in updates.keys()])))
+        zones = {str(z.id): z for z in result.scalars().all()}
+
+        for zone_id, current_count in updates.items():
+            zone = zones.get(zone_id)
+            if not zone:
+                continue
+
+            occupancy_pct = round((current_count / zone.capacity) * 100, 1)
+            cached = _prediction_cache.get(zone_id)
+            
+            # Local rule-based severity evaluation for simulation counts
+            severity = "alert" if occupancy_pct > 90 else ("watch" if occupancy_pct > 70 else "normal")
+
+            payload = {
+                "id": cached.get("id") if cached else str(uuid.uuid4()),
+                "zone_id": zone_id,
+                "zone_name": zone.name,
+                "minutes_until_overcapacity": cached.get("minutes_until_overcapacity") if cached else None,
+                "recommended_action": cached.get("recommended_action") if cached else f"Traffic flow normal in {zone.name}.",
+                "confidence": cached.get("confidence") if cached else 1.0,
+                "severity": severity,
+                "current_count": current_count,
+                "occupancy_pct": occupancy_pct,
+                "capacity": zone.capacity,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            # Broadcast
+            await ws_manager.broadcast({
+                "event_type": "crowd_update",
+                "data": payload,
+            })

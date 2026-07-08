@@ -52,6 +52,48 @@ Text to translate:
 """
 
 
+import os
+from datetime import date
+
+class BudgetGuard:
+    def __init__(self, filename: str = "gemini_call_budget.json", threshold: int = 15):
+        self.filename = filename
+        self.threshold = threshold
+
+    def _load_data(self) -> dict:
+        if not os.path.exists(self.filename):
+            return {"date": str(date.today()), "count": 0}
+        try:
+            with open(self.filename, "r") as f:
+                data = json.load(f)
+                if data.get("date") != str(date.today()):
+                    return {"date": str(date.today()), "count": 0}
+                return data
+        except Exception:
+            return {"date": str(date.today()), "count": 0}
+
+    def _save_data(self, data: dict):
+        try:
+            with open(self.filename, "w") as f:
+                json.dump(data, f)
+        except Exception:
+            pass
+
+    def get_count(self) -> int:
+        return self._load_data().get("count", 0)
+
+    def get_remaining(self) -> int:
+        return max(0, self.threshold - self.get_count())
+
+    def is_exhausted(self) -> bool:
+        return self.get_count() >= self.threshold
+
+    def increment(self):
+        data = self._load_data()
+        data["count"] = data.get("count", 0) + 1
+        self._save_data(data)
+
+
 class GeminiClient:
     def __init__(self):
         settings = get_settings()
@@ -59,6 +101,7 @@ class GeminiClient:
         self.chat_model_name = settings.gemini_chat_model
         self._prediction_model = None
         self._chat_model = None
+        self.budget_guard = BudgetGuard(threshold=settings.gemini_budget_limit)
 
     def _get_prediction_model(self):
         if self._prediction_model is None:
@@ -73,10 +116,10 @@ class GeminiClient:
     async def generate_crowd_prediction(self, zone_summary: dict) -> dict | None:
         """
         Send zone data to Gemini and get a structured crowd prediction.
-        Retries once on malformed JSON response. Supports USE_MOCK_GEMINI.
+        Retries once on malformed JSON response. Supports USE_MOCK_GEMINI and BudgetGuard.
         """
         settings = get_settings()
-        if settings.use_mock_gemini:
+        if settings.use_mock_gemini or self.budget_guard.is_exhausted():
             import random
             occ = zone_summary.get("occupancy_pct", 50.0)
             if occ < 70.0:
@@ -123,6 +166,7 @@ class GeminiClient:
                 required = {"minutes_until_overcapacity", "confidence", "recommended_action", "severity"}
                 if not required.issubset(result.keys()):
                     raise ValueError(f"Missing keys: {required - result.keys()}")
+                self.budget_guard.increment()
                 return result
             except Exception as e:
                 raw_resp = response.text if 'response' in locals() else 'None'
@@ -134,10 +178,10 @@ class GeminiClient:
     async def generate_crowd_predictions_batch(self, zones_data: list[dict]) -> list[dict] | None:
         """
         Send telemetry for multiple zones to Gemini in one prompt, returning a list of predictions.
-        Supports USE_MOCK_GEMINI.
+        Supports USE_MOCK_GEMINI and BudgetGuard.
         """
         settings = get_settings()
-        if settings.use_mock_gemini:
+        if settings.use_mock_gemini or self.budget_guard.is_exhausted():
             import random
             mock_preds = []
             for z in zones_data:
@@ -187,7 +231,9 @@ class GeminiClient:
                 )
                 raw = response.text.strip()
                 result = json.loads(raw)
-                return result.get("predictions", [])
+                predictions = result.get("predictions", [])
+                self.budget_guard.increment()
+                return predictions
             except Exception as e:
                 raw_resp = response.text if 'response' in locals() else 'None'
                 logger.warning(f"Gemini batch prediction attempt {attempt + 1} failed: {e}. Raw response: {raw_resp}")
@@ -203,8 +249,12 @@ class GeminiClient:
     ) -> str:
         """
         Non-streaming chat completion for fan assistant.
-        Returns full response text.
+        Returns full response text. Supports USE_MOCK_GEMINI and BudgetGuard.
         """
+        settings = get_settings()
+        if settings.use_mock_gemini or self.budget_guard.is_exhausted():
+            return "The stadium AI assistant is temporarily running in power-saver mode. Real-time answering is offline, but did you know: Gates open 2.5 hours before kickoff, and restrooms are located along each concourse level!"
+
         model = self._get_chat_model()
         try:
             # Build conversation history for Gemini
@@ -234,13 +284,18 @@ class GeminiClient:
                         max_output_tokens=1024,
                     ),
                 )
+            self.budget_guard.increment()
             return response.text
         except Exception as e:
             logger.error(f"Gemini chat completion failed: {e}")
             return "I'm having a moment — please try again shortly! 🏟️"
 
     async def translate(self, text: str, target_language: str) -> str:
-        """Translate text using Gemini for nuanced stadium-context translation."""
+        """Translate text using Gemini for nuanced stadium-context translation. Supports BudgetGuard."""
+        settings = get_settings()
+        if settings.use_mock_gemini or self.budget_guard.is_exhausted():
+            return text
+
         model = self._get_chat_model()
         prompt = TRANSLATE_PROMPT.format(target_language=target_language, text=text)
         try:
@@ -252,6 +307,7 @@ class GeminiClient:
                     max_output_tokens=2048,
                 ),
             )
+            self.budget_guard.increment()
             return response.text.strip()
         except Exception as e:
             logger.error(f"Gemini translation failed: {e}")
