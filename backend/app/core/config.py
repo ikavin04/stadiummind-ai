@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_prediction_model: str = "gemini-2.5-flash"
     gemini_chat_model: str = "gemini-2.5-flash"
+    use_mock_gemini: bool = True
 
     # Firebase
     firebase_project_id: str = ""
@@ -24,7 +25,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
     # Simulation
-    simulation_interval_seconds: int = 15
+    simulation_interval_seconds: int = 60
 
     @property
     def cors_origins_list(self) -> list[str]:

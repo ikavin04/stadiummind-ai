@@ -145,35 +145,176 @@ async def predict_for_zone(zone_id: str, current_count: int) -> dict | None:
         return result_dict
 
 
+import uuid
+
+async def predict_for_zones_batch(updates: dict[str, int]) -> list[dict]:
+    """
+    Predict for multiple zones at once by batching Gemini calls.
+    Returns list of prediction result dicts. Supports USE_MOCK_GEMINI.
+    """
+    if not updates:
+        return []
+
+    async with AsyncSessionLocal() as session:
+        # Fetch all relevant zones
+        result = await session.execute(select(Zone).where(Zone.id.in_([uuid.UUID(k) if isinstance(k, str) else k for k in updates.keys()])))
+        zones = {str(z.id): z for z in result.scalars().all()}
+
+        predictions_to_save = {}  # zone_id -> prediction_data (dict)
+        gemini_batch_input = []   # list of summaries to send to Gemini
+
+        for zone_id, current_count in updates.items():
+            zone = zones.get(zone_id)
+            if not zone:
+                continue
+
+            readings = await _get_recent_readings(session, zone_id, limit=10)
+            occupancy_pct = round((current_count / zone.capacity) * 100, 1)
+            trend = _compute_trend(readings)
+
+            zone_summary = {
+                "zone_id": zone_id,
+                "zone_name": zone.name,
+                "zone_type": zone.zone_type,
+                "capacity": zone.capacity,
+                "current_count": current_count,
+                "occupancy_pct": occupancy_pct,
+                "trend": trend,
+                "recent_readings": [
+                    {
+                        "count": r.current_count,
+                        "recorded_at": r.recorded_at.isoformat() if r.recorded_at else None,
+                        "occupancy_pct": round((r.current_count / zone.capacity) * 100, 1),
+                    }
+                    for r in readings
+                ],
+            }
+
+            # Smart Rate-Limit Guard: Low occupancy and stable trend -> local prediction directly
+            if occupancy_pct < 70.0 and trend != "rising":
+                predictions_to_save[zone_id] = {
+                    "minutes_until_overcapacity": None,
+                    "confidence": 1.0,
+                    "recommended_action": f"Traffic flow normal in {zone.name}.",
+                    "severity": "normal",
+                    "current_count": current_count,
+                    "occupancy_pct": occupancy_pct,
+                    "zone_name": zone.name,
+                    "capacity": zone.capacity,
+                }
+            else:
+                gemini_batch_input.append(zone_summary)
+
+        # Execute Gemini batch call
+        gemini_predictions = []
+        if gemini_batch_input:
+            batch_result = await gemini_client.generate_crowd_predictions_batch(gemini_batch_input)
+            if batch_result:
+                gemini_predictions = batch_result
+
+        # Map Gemini predictions by zone_id
+        gemini_by_zone = {p["zone_id"]: p for p in gemini_predictions if "zone_id" in p}
+
+        for item in gemini_batch_input:
+            zone_id = item["zone_id"]
+            zone = zones[zone_id]
+            current_count = item["current_count"]
+            occupancy_pct = item["occupancy_pct"]
+
+            gemini_res = gemini_by_zone.get(zone_id)
+            if gemini_res is None:
+                # Fallback to cache/rule-based
+                logger.warning(f"Gemini batch prediction missing/failed for zone {zone.name}, using cache/rule-based fallback")
+                cached = _prediction_cache.get(zone_id)
+                if cached:
+                    predictions_to_save[zone_id] = cached
+                    continue
+                # Rule-based fallback
+                gemini_res = {
+                    "minutes_until_overcapacity": max(0, int((100 - occupancy_pct) * 2)) if occupancy_pct > 70 else None,
+                    "confidence": 0.5,
+                    "recommended_action": "Monitor zone carefully. AI prediction temporarily unavailable.",
+                    "severity": "alert" if occupancy_pct > 90 else ("watch" if occupancy_pct > 70 else "normal"),
+                }
+
+            predictions_to_save[zone_id] = {
+                "minutes_until_overcapacity": gemini_res.get("minutes_until_overcapacity"),
+                "confidence": gemini_res.get("confidence", 0.8),
+                "recommended_action": gemini_res.get("recommended_action"),
+                "severity": gemini_res.get("severity", "normal"),
+                "current_count": current_count,
+                "occupancy_pct": occupancy_pct,
+                "zone_name": zone.name,
+                "capacity": zone.capacity,
+            }
+
+        # Persist all predictions
+        results = []
+        for zone_id, pred_data in predictions_to_save.items():
+            minutes = pred_data.get("minutes_until_overcapacity")
+            predicted_at = None
+            if minutes is not None:
+                predicted_at = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+
+            prediction = CrowdPrediction(
+                zone_id=uuid.UUID(zone_id) if isinstance(zone_id, str) else zone_id,
+                predicted_overcapacity_at=predicted_at,
+                minutes_until_overcapacity=minutes,
+                recommended_action=pred_data.get("recommended_action"),
+                confidence=pred_data.get("confidence"),
+                severity=pred_data.get("severity", "normal"),
+            )
+            session.add(prediction)
+            await session.flush()
+
+            result_dict = {
+                "id": str(prediction.id),
+                "zone_id": zone_id,
+                "zone_name": pred_data["zone_name"],
+                "minutes_until_overcapacity": prediction.minutes_until_overcapacity,
+                "recommended_action": prediction.recommended_action,
+                "confidence": float(prediction.confidence) if prediction.confidence else None,
+                "severity": prediction.severity,
+                "current_count": pred_data["current_count"],
+                "occupancy_pct": pred_data["occupancy_pct"],
+                "capacity": pred_data["capacity"],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            _prediction_cache[zone_id] = result_dict
+            results.append(result_dict)
+
+        await session.commit()
+        return results
+
+
 async def run_predictions_for_updates(updates: dict[str, int]):
     """
-    Called after a simulation tick. Runs predictions for each updated zone
+    Called after a simulation tick. Runs batched predictions for all updated zones
     and broadcasts results over WebSocket.
     """
-    for zone_id, count in updates.items():
-        try:
-            prediction = await predict_for_zone(zone_id, count)
-            if prediction:
-                # Broadcast to WS clients
-                await ws_manager.broadcast({
-                    "event_type": "crowd_update",
-                    "data": prediction,
-                })
+    try:
+        predictions = await predict_for_zones_batch(updates)
+        for prediction in predictions:
+            # Broadcast to WS clients
+            await ws_manager.broadcast({
+                "event_type": "crowd_update",
+                "data": prediction,
+            })
 
-                # If alert or watch, send a separate alert event
-                if prediction.get("severity") in ("alert", "watch"):
-                    await ws_manager.broadcast({
-                        "event_type": "alert",
-                        "data": {
-                            "zone_id": zone_id,
-                            "zone_name": prediction["zone_name"],
-                            "severity": prediction["severity"],
-                            "message": prediction.get("recommended_action", "Monitor this zone."),
-                            "timestamp": prediction.get("created_at"),
-                        },
-                    })
-        except Exception as e:
-            logger.error(f"Prediction failed for zone {zone_id}: {e}", exc_info=True)
+            # If alert or watch, send a separate alert event
+            if prediction.get("severity") in ("alert", "watch"):
+                await ws_manager.broadcast({
+                    "event_type": "alert",
+                    "data": {
+                        "zone_id": prediction["zone_id"],
+                        "zone_name": prediction["zone_name"],
+                        "severity": prediction["severity"],
+                        "message": prediction.get("recommended_action", "Monitor this zone."),
+                        "timestamp": prediction.get("created_at"),
+                    },
+                })
+    except Exception as e:
+        logger.error(f"Batch prediction run failed: {e}", exc_info=True)
 
 
 async def get_latest_predictions_all() -> list[dict]:

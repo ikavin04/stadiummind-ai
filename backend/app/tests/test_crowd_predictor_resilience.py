@@ -185,10 +185,16 @@ async def test_gemini_client_retries_once_on_malformed_json():
         # Simulate asyncio.to_thread wrapping a bad response
         raise ValueError("Simulated malformed response")
 
+    from app.core.config import Settings
+    mock_settings = Settings(use_mock_gemini=False, gemini_api_key="dummy")
+
     client = GeminiClient()
     client._prediction_model = MagicMock()
 
-    with patch("asyncio.to_thread", side_effect=fake_generate):
+    with (
+        patch("app.core.gemini_client.get_settings", return_value=mock_settings),
+        patch("asyncio.to_thread", side_effect=fake_generate),
+    ):
         result = await client.generate_crowd_prediction({"zone_name": "Test", "capacity": 1000, "current_count": 900})
 
     assert result is None, "Should return None after 2 failed attempts"

@@ -56,6 +56,18 @@ class GeminiPredictionResponse(BaseModel):
     severity: str
 
 
+class GeminiZonePrediction(BaseModel):
+    zone_id: str
+    minutes_until_overcapacity: Optional[int]
+    confidence: float
+    recommended_action: str
+    severity: str
+
+
+class GeminiBatchPredictionResponse(BaseModel):
+    predictions: list[GeminiZonePrediction]
+
+
 # ─────────────────────────────────────────
 # Dashboard schemas
 # ─────────────────────────────────────────
