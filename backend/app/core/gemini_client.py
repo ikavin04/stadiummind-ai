@@ -246,14 +246,63 @@ class GeminiClient:
         system_prompt: str,
         history: list[dict],
         user_message: str,
+        context_chunks: list[str] | None = None,
     ) -> str:
         """
         Non-streaming chat completion for fan assistant.
         Returns full response text. Supports USE_MOCK_GEMINI and BudgetGuard.
+
+        INTENTIONAL DESIGN — Mock mode (USE_MOCK_GEMINI=true):
+        ---------------------------------------------------------
+        We still run the full FAISS retrieval pipeline before calling this method
+        (see fan_assistant.py:chat()) because vector search is purely local and
+        costs nothing. Only the final Gemini LLM call is skipped in mock mode.
+
+        Instead of a static canned string, we format a direct answer from the
+        top retrieved chunks so the response is actually relevant to the question.
+        The generic 'power-saver' fallback only appears when FAISS found nothing.
+
+        This makes mock mode genuinely useful during development and demo/hackathon
+        runs with no API quota, while making it easy to swap in real Gemini by
+        simply setting USE_MOCK_GEMINI=false.
         """
         settings = get_settings()
         if settings.use_mock_gemini or self.budget_guard.is_exhausted():
-            return "The stadium AI assistant is temporarily running in power-saver mode. Real-time answering is offline, but did you know: Gates open 2.5 hours before kickoff, and restrooms are located along each concourse level!"
+            # context_chunks is the already-filtered list from retrieve_relevant_chunks.
+            # Retrieval applies both a minimum relevance gate (score ≥ MIN_MOCK_SCORE) and a
+            # secondary-chunk delta gate (score ≥ SECONDARY_RATIO × top_score), so we
+            # can trust every chunk here is genuinely relevant.  We no longer need to
+            # decide here whether to include extra chunks — that decision was made upstream.
+            if context_chunks:
+                # One chunk → single focused answer; two+ → join with "Additionally:"
+                # (retrieval only sends multiple chunks when they are closely related).
+                answer_parts = [context_chunks[0]]
+                if len(context_chunks) > 1:
+                    answer_parts.append(f"Additionally: {context_chunks[1]}")
+                body = "\n\n".join(answer_parts)
+                return (
+                    f"Based on our stadium info:\n\n{body}\n\n"
+                    "_— StadiumMind (running in offline mode; full AI answers available when Gemini quota is enabled)_"
+                )
+
+            # Empty context_chunks has two possible meanings:
+            # 1. The query is genuinely out of scope (retrieval found no relevant chunk).
+            # 2. The FAISS index itself is unavailable.
+            # We distinguish by checking whether the index is loaded.
+            from app.services.fan_assistant import _faiss_index, _faiss_metadata
+            if _faiss_index is not None and _faiss_metadata:
+                # Index is fine — the question simply isn't in our knowledge base.
+                return (
+                    "I don't have specific information on that. "
+                    "For anything not covered here, please check with a volunteer or "
+                    "Fan Services at Gate B — they'll be happy to help! 🏟️"
+                )
+            # FAISS index unavailable — generic offline fallback.
+            return (
+                "The stadium AI assistant is temporarily running in power-saver mode. "
+                "Real-time answering is offline, but did you know: Gates open 2.5 hours before "
+                "kickoff, and restrooms are located along each concourse level!"
+            )
 
         model = self._get_chat_model()
         try:

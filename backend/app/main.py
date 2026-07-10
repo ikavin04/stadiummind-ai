@@ -24,7 +24,7 @@ _simulation_task: asyncio.Task | None = None
 async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle."""
     global _simulation_task
-    logger.info("🏟️ StadiumMind AI starting up...")
+    logger.info("[STARTUP] StadiumMind AI starting up...")
 
     # Initialize Firebase
     init_firebase()
@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
     yield  # Application running
 
     # Shutdown
-    logger.info("🏟️ StadiumMind AI shutting down...")
+    logger.info("[SHUTDOWN] StadiumMind AI shutting down...")
     from app.services.simulator import stop_simulation
     stop_simulation()
     if _simulation_task:

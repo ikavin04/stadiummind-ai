@@ -1,7 +1,7 @@
 """Pydantic schemas for all API request/response models."""
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ─────────────────────────────────────────
@@ -101,6 +101,7 @@ class ChatMessageRequest(BaseModel):
 
 
 class ChatMessageResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     conversation_id: str
     message_id: str
     reply: str

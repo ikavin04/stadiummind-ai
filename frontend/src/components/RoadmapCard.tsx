@@ -3,11 +3,24 @@
  * These components make ZERO backend calls.
  * They are display-only "Planned" cards per MDD §3.2 and §14.
  */
-import { useState } from 'react';
-import { X } from 'lucide-react';
+import {
+  X, Map, HardHat, Stethoscope, Accessibility,
+  UtensilsCrossed, Leaf,
+} from 'lucide-react';
 import type { RoadmapModule } from '../types';
 import { PlannedBadge } from './Badge';
 import { GlassCard } from './GlassCard';
+
+// ─── Icon map: module id → lucide ReactNode ────────────────────────────────────
+// Replaces emoji icon strings so no emoji characters appear in the rendered UI.
+const MODULE_ICONS: Record<string, React.ReactNode> = {
+  'indoor-nav':        <Map           className="w-5 h-5" aria-hidden />,
+  'volunteer-copilot': <HardHat       className="w-5 h-5" aria-hidden />,
+  'medical-assistant': <Stethoscope   className="w-5 h-5" aria-hidden />,
+  'accessibility':     <Accessibility className="w-5 h-5" aria-hidden />,
+  'vendor-intelligence':<UtensilsCrossed className="w-5 h-5" aria-hidden />,
+  'sustainability':    <Leaf          className="w-5 h-5" aria-hidden />,
+};
 
 // ─── Roadmap module definitions ───────────────────────────────────────────────
 // All content is static — no network requests.
@@ -16,7 +29,7 @@ export const ROADMAP_MODULES: RoadmapModule[] = [
   {
     id: 'indoor-nav',
     name: 'Indoor Navigation AI',
-    icon: '🗺️',
+    icon: 'map',
     tagline: 'Step-by-step wayfinding from any point to any point inside the stadium.',
     description:
       'Guides fans from their current location to their seat, gate, concession stand, or medical center using real-time indoor positioning.',
@@ -26,7 +39,7 @@ export const ROADMAP_MODULES: RoadmapModule[] = [
   {
     id: 'volunteer-copilot',
     name: 'Volunteer Copilot',
-    icon: '🦺',
+    icon: 'hardhat',
     tagline: 'AI task queue and shift assistant for stadium volunteers.',
     description:
       'Gives each volunteer a personalized AI briefing, shift task list, and real-time re-assignment recommendations when crowd hotspots develop.',
@@ -36,7 +49,7 @@ export const ROADMAP_MODULES: RoadmapModule[] = [
   {
     id: 'medical-assistant',
     name: 'Medical Assistant',
-    icon: '🏥',
+    icon: 'stethoscope',
     tagline: 'Triage support and AED routing for stadium medical teams.',
     description:
       'Enables fans to report medical incidents via the app. AI triages severity and routes the nearest medical team with AED and defibrillator locations.',
@@ -46,7 +59,7 @@ export const ROADMAP_MODULES: RoadmapModule[] = [
   {
     id: 'accessibility',
     name: 'Accessibility Assistant',
-    icon: '♿',
+    icon: 'accessibility',
     tagline: 'Mobility-aware routing and ASL interpretation request queue.',
     description:
       'Provides wheelchair-accessible pathfinding, elevator availability, companion seating requests, and on-demand ASL interpreter dispatch.',
@@ -56,7 +69,7 @@ export const ROADMAP_MODULES: RoadmapModule[] = [
   {
     id: 'vendor-intelligence',
     name: 'Vendor Intelligence',
-    icon: '🍔',
+    icon: 'utensils',
     tagline: 'Real-time restocking recommendations for concession vendors.',
     description:
       'Monitors POS transaction rates across concession stands and predicts which items will run out before the next half, triggering restocking alerts.',
@@ -66,7 +79,7 @@ export const ROADMAP_MODULES: RoadmapModule[] = [
   {
     id: 'sustainability',
     name: 'Sustainability Dashboard',
-    icon: '🌱',
+    icon: 'leaf',
     tagline: 'Energy and water consumption analytics with AI efficiency recommendations.',
     description:
       'Tracks real-time energy consumption, water usage, and waste generation across the stadium, with AI recommendations for reducing environmental impact.',
@@ -91,7 +104,9 @@ export function RoadmapCard({ module, onOpen }: RoadmapCardProps) {
       id={`roadmap-${module.id}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-2xl" role="img" aria-label={module.name}>{module.icon}</span>
+        <div className="w-9 h-9 rounded-xl bg-bg-surface flex items-center justify-center text-text-secondary border border-bg-border">
+          {MODULE_ICONS[module.id]}
+        </div>
         <PlannedBadge />
       </div>
       <div>
@@ -136,7 +151,9 @@ export function RoadmapModal({ module, onClose }: RoadmapModalProps) {
           {/* Header */}
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className="text-3xl" role="img" aria-label={module.name}>{module.icon}</span>
+              <div className="w-10 h-10 rounded-xl bg-bg-surface flex items-center justify-center text-text-secondary border border-bg-border">
+                {MODULE_ICONS[module.id]}
+              </div>
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg font-bold text-text-primary">{module.name}</h2>

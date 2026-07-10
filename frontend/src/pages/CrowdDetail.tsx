@@ -65,7 +65,7 @@ export function CrowdDetail() {
             Dashboard
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-text-primary">{t('crowdPrediction', language)}</h1>
+            <h1 className="text-display text-2xl font-bold text-text-primary">{t('crowdPrediction', language)}</h1>
             <p className="text-sm text-text-muted">Per-zone occupancy trends and AI forecasts</p>
           </div>
         </div>

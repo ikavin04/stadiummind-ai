@@ -1,3 +1,4 @@
+import { CheckCircle2, AlertTriangle, ShieldAlert } from 'lucide-react';
 import type { Severity } from '../types';
 import { cn } from '../lib/utils';
 
@@ -11,6 +12,13 @@ const SEVERITY_LABELS: Record<Severity, string> = {
   normal: 'Normal',
   watch:  'Watch',
   alert:  'Alert',
+};
+
+/** Icon component for each severity — lucide, consistent w-3 h-3 sizing. */
+const SEVERITY_ICONS: Record<Severity, React.ReactNode> = {
+  normal: <CheckCircle2 className="w-3 h-3" aria-hidden />,
+  watch:  <AlertTriangle className="w-3 h-3" aria-hidden />,
+  alert:  <ShieldAlert   className="w-3 h-3" aria-hidden />,
 };
 
 interface SeverityBadgeProps {
@@ -29,6 +37,7 @@ export function SeverityBadge({ severity, className, pulse }: SeverityBadgeProps
       )}
     >
       {pulse && <span className="live-dot w-1.5 h-1.5" />}
+      {SEVERITY_ICONS[severity]}
       {SEVERITY_LABELS[severity]}
     </span>
   );

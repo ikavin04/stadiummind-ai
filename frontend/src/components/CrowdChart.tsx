@@ -1,5 +1,5 @@
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, Area, AreaChart
 } from 'recharts';
 import type { ZoneHistory } from '../types';
@@ -24,13 +24,18 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export function CrowdChart({ history, minutesUntilFull }: CrowdChartProps) {
   const data = history.readings.map((r) => ({
+    // HH:mm only — no seconds, keeps x-axis clean
     time: new Date(r.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     occupancy: r.occupancy_pct,
     count: r.count,
   }));
 
+  // Thin out labels: show at most 6 evenly-spaced ticks on the x-axis
+  const tickInterval = Math.max(1, Math.ceil(data.length / 6) - 1);
+
   // Compute projected overcapacity line position if we have a prediction
   const projectedLabel = minutesUntilFull != null ? `~${minutesUntilFull}m` : null;
+  void projectedLabel; // used in potential future reference line label
 
   return (
     <div className="w-full h-56">
@@ -48,7 +53,7 @@ export function CrowdChart({ history, minutesUntilFull }: CrowdChartProps) {
             tick={{ fill: '#525870', fontSize: 11 }}
             axisLine={false}
             tickLine={false}
-            interval="preserveStartEnd"
+            interval={tickInterval}
           />
           <YAxis
             domain={[0, 110]}

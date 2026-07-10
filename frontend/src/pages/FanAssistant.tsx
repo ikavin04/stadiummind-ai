@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Globe, Trash2, MessageSquare } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Send, Globe, Trash2, MessageSquare, Building2, AlertTriangle, ChevronLeft } from 'lucide-react';
 import { Layout } from '../components/Layout';
-import { GlassCard } from '../components/GlassCard';
+import { FanLayout } from '../components/FanLayout';
 import { ChatList } from '../components/ChatBubble';
 import { Spinner } from '../components/Spinner';
 import { useChat } from '../hooks/useChat';
 import { useDashboardSocket } from '../hooks/useDashboardSocket';
 import { useAppStore } from '../store/useAppStore';
+import { useRole } from '../lib/roles';
 import { LANGUAGES } from '../lib/i18n';
 import { t } from '../lib/i18n';
 import { cn } from '../lib/utils';
@@ -22,13 +24,26 @@ const QUICK_QUESTIONS_KEYS = [
 ] as const;
 
 export function FanAssistant() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { language, setLanguage } = useAppStore();
+  const role = useRole();
   const { status } = useDashboardSocket();
   const { messages, isLoading, error, sendMessage, clearConversation } = useChat(language);
   const [input, setInput] = useState('');
   const [showLangMenu, setShowLangMenu] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const langMenuRef = useRef<HTMLDivElement>(null);
+  const prefillSentRef = useRef(false);
+
+  // Auto-send pre-filled question from ?q= (e.g. from FanHub quick-action cards)
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q && !prefillSentRef.current) {
+      prefillSentRef.current = true;
+      sendMessage(q);
+    }
+  }, [searchParams, sendMessage]);
 
   // Close lang menu on outside click
   useEffect(() => {
@@ -64,24 +79,37 @@ export function FanAssistant() {
   const handleLanguageSelect = (lang: Language) => {
     setLanguage(lang);
     setShowLangMenu(false);
-    clearConversation(); // start fresh conversation in new language
+    clearConversation();
   };
 
   const currentLang = LANGUAGES.find((l) => l.code === language)!;
   const isRtl = currentLang.dir === 'rtl';
 
+  const isFan = role === 'fan';
+  const ChatWrapper = isFan
+    ? ({ children }: { children: React.ReactNode }) => <FanLayout>{children}</FanLayout>
+    : ({ children }: { children: React.ReactNode }) => <Layout wsStatus={status}>{children}</Layout>;
+
   return (
-    <Layout wsStatus={status}>
-      <div className="flex flex-col h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+    <ChatWrapper>
+      <div className={cn('flex flex-col', isFan ? 'h-[calc(100vh-3.5rem)]' : 'h-screen')} dir={isRtl ? 'rtl' : 'ltr'}>
         {/* ── Header ── */}
         <div className="shrink-0 border-b border-bg-border px-6 py-4">
           <div className="flex items-center justify-between gap-4 max-w-3xl mx-auto">
             <div className="flex items-center gap-3">
+              <button
+                id="btn-back"
+                onClick={() => navigate(role === 'fan' ? '/fan-hub' : '/dashboard')}
+                aria-label="Go back"
+                className="btn-ghost !p-2 flex items-center justify-center shrink-0"
+              >
+                <ChevronLeft className="w-4 h-4" aria-hidden />
+              </button>
               <div className="w-9 h-9 rounded-xl bg-accent-green/15 border border-accent-green/25 flex items-center justify-center">
                 <MessageSquare className="w-4 h-4 text-accent-green" aria-hidden />
               </div>
               <div>
-                <h1 className="text-base font-bold text-text-primary">{t('fanAssistant', language)}</h1>
+                <h1 className="text-display text-base font-bold text-text-primary">{t('fanAssistant', language)}</h1>
                 <p className="text-xs text-text-muted">FIFA World Cup 2026 · MetLife Stadium</p>
               </div>
             </div>
@@ -143,7 +171,12 @@ export function FanAssistant() {
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-6 px-6 py-8">
               <div className="text-center space-y-2">
-                <div className="text-5xl">🏟️</div>
+                {/* Building2 icon replaces 🏟️ emoji */}
+                <div className="flex items-center justify-center mb-2">
+                  <div className="w-16 h-16 rounded-2xl bg-accent-green/10 border border-accent-green/20 flex items-center justify-center shadow-green-glow">
+                    <Building2 className="w-8 h-8 text-accent-green" aria-hidden />
+                  </div>
+                </div>
                 <h2 className="text-lg font-bold text-text-primary">Hi! I'm StadiumMind</h2>
                 <p className="text-sm text-text-secondary max-w-xs">
                   Your AI guide for FIFA World Cup 2026 at MetLife Stadium. Ask me anything!
@@ -174,9 +207,26 @@ export function FanAssistant() {
 
         {/* ── Input area ── */}
         <div className="shrink-0 border-t border-bg-border px-6 py-4 bg-bg-surface/50 backdrop-blur-xl">
+          {messages.length > 0 && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-3 max-w-3xl mx-auto no-scrollbar scroll-smooth" role="list" aria-label="Recommended questions">
+              {QUICK_QUESTIONS_KEYS.map((key) => (
+                <button
+                  key={key}
+                  id={`suggest-${key}`}
+                  role="listitem"
+                  onClick={() => handleQuickQuestion(key)}
+                  className="shrink-0 px-3 py-1.5 rounded-full border border-bg-border bg-bg-card text-xs text-text-secondary hover:text-text-primary hover:border-accent-green/30 hover:bg-bg-surface transition-all duration-150"
+                >
+                  {t(key, language)}
+                </button>
+              ))}
+            </div>
+          )}
           {error && (
-            <p className="text-xs text-accent-red mb-2 max-w-3xl mx-auto">
-              ⚠️ {error}
+            <p className="text-xs text-accent-red mb-2 max-w-3xl mx-auto flex items-center gap-1.5">
+              {/* AlertTriangle replaces ⚠️ emoji */}
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden />
+              {error}
             </p>
           )}
           <div className="flex items-end gap-3 max-w-3xl mx-auto">
@@ -214,6 +264,6 @@ export function FanAssistant() {
           </p>
         </div>
       </div>
-    </Layout>
+    </ChatWrapper>
   );
 }

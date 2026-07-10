@@ -114,14 +114,118 @@ async def build_faiss_index():
     logger.info(f"FAISS index built with {len(embeddings)} vectors (dim={dim})")
 
 
+# ── Relevance thresholds for mock-mode keyword retrieval ──────────────────
+# MIN_MOCK_SCORE: minimum keyword-overlap score the TOP chunk must reach for the
+# query to be considered "in scope". A score of 0 means no query word appeared
+# in ANY chunk → clearly out of scope → return [] so the caller can issue the
+# graceful fallback instead of surfacing a random irrelevant chunk.
+MIN_MOCK_SCORE: int = 1
+
+# SECONDARY_RATIO: the second chunk is only appended when its score is at least
+# this fraction of the top chunk's score. This prevents weakly-related chunks
+# from being glued onto every response with "Additionally: …".
+# Example: top_score=5, ratio=0.6 → second chunk must score ≥ 3.
+SECONDARY_RATIO: float = 0.6
+
+# STOP_WORDS: common English function words that appear in virtually every
+# sentence. Counting them as matching keywords would give spurious scores to
+# out-of-scope queries (e.g. "what is the stock price" scores 1 because "is"
+# and "the" appear in stadium chunks). Filtering them before scoring means
+# MIN_MOCK_SCORE=1 reliably requires at least one *content* word to match.
+STOP_WORDS: frozenset[str] = frozenset({
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+    "being", "have", "has", "had", "do", "does", "did", "will", "would",
+    "could", "should", "may", "might", "can", "i", "you", "he", "she",
+    "it", "we", "they", "me", "him", "her", "us", "them", "my", "your",
+    "his", "its", "our", "their", "this", "that", "these", "those",
+    "what", "which", "who", "how", "when", "where", "why", "not", "no",
+    "so", "if", "as", "up", "out", "about", "into", "than", "then",
+    "there", "here", "get", "any", "all", "just", "like", "also",
+})
+
+
 async def retrieve_relevant_chunks(query: str, top_k: int = 4) -> list[str]:
-    """Embed query and retrieve top-k relevant knowledge chunks via FAISS."""
+    """
+    Embed query and retrieve top-k relevant knowledge chunks via FAISS.
+
+    INTENTIONAL DESIGN — Mock mode (USE_MOCK_GEMINI=true):
+    --------------------------------------------------------
+    In mock mode we skip the Gemini Embedding API call (which costs quota)
+    and instead score chunks with simple keyword overlap. This keeps FAISS
+    retrieval functional at zero cost so chat() can return context-relevant
+    answers without a real API key.
+
+    Relevance gates (mock mode only):
+    • Top-match minimum  — if the best keyword-overlap score is below
+      MIN_MOCK_SCORE the query is out of scope; we return [] so the
+      caller issues a graceful fallback instead of a random chunk.
+    • Secondary-chunk delta — the second chunk is only included when its
+      score is ≥ SECONDARY_RATIO × top_score, preventing loosely-related
+      chunks from being appended to every response.
+    """
     global _faiss_index, _faiss_metadata
 
     if _faiss_index is None or not _faiss_metadata:
         logger.warning("FAISS index not available — returning empty context")
         return []
 
+    settings = get_settings()
+
+    # ——— Mock path: keyword-based retrieval (no Gemini API call) ———
+    if settings.use_mock_gemini:
+        # Strip punctuation and remove stop-words so common function words
+        # ("is", "the", "at", "of" …) don't produce false-positive scores for
+        # queries that share no real content words with the knowledge base.
+        import re
+        query_tokens = re.sub(r"[^\w\s]", "", query.lower()).split()
+        query_words = {w for w in query_tokens if w not in STOP_WORDS}
+        # Score each chunk by how many query words appear in it
+        scored = [
+            (
+                sum(1 for w in query_words if w in chunk["content"].lower()),
+                chunk["content"],
+            )
+            for chunk in _faiss_metadata
+        ]
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        top_score = scored[0][0] if scored else 0
+
+        # ── Minimum relevance gate ──────────────────────────────────────────
+        # If even the best match scores below MIN_MOCK_SCORE the question is
+        # genuinely out of scope for the knowledge base.  Return [] so the
+        # caller can surface the graceful "I don't have info on that" reply
+        # instead of a random, unrelated chunk.
+        if top_score < MIN_MOCK_SCORE:
+            logger.info(
+                "Mock retrieval: top score %d < MIN_MOCK_SCORE %d — query is out of scope",
+                top_score, MIN_MOCK_SCORE,
+            )
+            return []
+
+        # ── Build result list with secondary-chunk delta gate ───────────────
+        results: list[str] = [scored[0][1]]  # always include the top match
+
+        secondary_threshold = top_score * SECONDARY_RATIO
+        added = 1
+        for score, content in scored[1:]:
+            if added >= top_k:
+                break
+            if score >= secondary_threshold:
+                results.append(content)
+                added += 1
+            else:
+                # Remaining chunks are sorted descending — none will qualify
+                break
+
+        logger.info(
+            "Mock retrieval: top_score=%d, threshold=%.1f → returning %d chunk(s)",
+            top_score, secondary_threshold, len(results),
+        )
+        return results
+
+    # ——— Real path: Gemini embedding + FAISS ANN search ———
     import faiss
     try:
         query_embedding = await asyncio.to_thread(_get_embedding, query, "RETRIEVAL_QUERY")
@@ -194,11 +298,12 @@ async def chat(
         # Build system prompt
         system_prompt = gemini_client.build_fan_assistant_prompt(context_chunks)
 
-        # Call Gemini
+        # Call Gemini (or use mock path in chat_completion)
         reply = await gemini_client.chat_completion(
             system_prompt=system_prompt,
             history=history,
             user_message=user_message,
+            context_chunks=context_chunks,  # passed so mock mode can format a relevant answer
         )
 
         # Translate if not English
@@ -226,8 +331,8 @@ async def chat(
         await session.refresh(assistant_msg)
 
         return {
-            "conversation_id": conv.id,
-            "message_id": assistant_msg.id,
+            "conversation_id": str(conv.id),
+            "message_id": str(assistant_msg.id),
             "reply": reply,
             "language": language,
         }
