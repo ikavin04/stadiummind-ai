@@ -138,10 +138,16 @@ KNOWLEDGE_CHUNKS = [
 ]
 
 
-async def seed():
+async def seed(skip_init_db: bool = False):
     from app.models import user, zone, crowd_reading, crowd_prediction, conversation, knowledge_chunk  # noqa — register models
 
-    await init_db()
+    if skip_init_db:
+        # Production path: Alembic already ran migrations + pgcrypto.
+        # We only need to seed data; don't touch the schema.
+        print("[INFO] Skipping init_db() — schema managed by Alembic")
+    else:
+        # Local dev path: create tables and pgcrypto extension via SQLAlchemy.
+        await init_db()
 
     async with AsyncSessionLocal() as session:
         # Seed zones
@@ -186,5 +192,9 @@ async def seed():
 
 
 if __name__ == "__main__":
+    import sys
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(seed())
+    # --no-init-db: skip CREATE TABLE / CREATE EXTENSION (use after alembic upgrade head)
+    skip_init = "--no-init-db" in sys.argv
+    asyncio.run(seed(skip_init_db=skip_init))
+

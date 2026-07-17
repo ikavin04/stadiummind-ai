@@ -280,10 +280,8 @@ class GeminiClient:
                 if len(context_chunks) > 1:
                     answer_parts.append(f"Additionally: {context_chunks[1]}")
                 body = "\n\n".join(answer_parts)
-                return (
-                    f"Based on our stadium info:\n\n{body}\n\n"
-                    "_— StadiumMind (running in offline mode; full AI answers available when Gemini quota is enabled)_"
-                )
+                # Return the retrieved answer on its own — no internal-state caveats.
+                return f"Based on our stadium info:\n\n{body}"
 
             # Empty context_chunks has two possible meanings:
             # 1. The query is genuinely out of scope (retrieval found no relevant chunk).
@@ -297,11 +295,11 @@ class GeminiClient:
                     "For anything not covered here, please check with a volunteer or "
                     "Fan Services at Gate B — they'll be happy to help! 🏟️"
                 )
-            # FAISS index unavailable — generic offline fallback.
+            # FAISS index unavailable — surface a helpful, clean response with no internal-state language.
             return (
-                "The stadium AI assistant is temporarily running in power-saver mode. "
-                "Real-time answering is offline, but did you know: Gates open 2.5 hours before "
-                "kickoff, and restrooms are located along each concourse level!"
+                "I don't have that information available right now. "
+                "Please check with a volunteer or visit Fan Services at Gate B "
+                "\u2014 they\'re wearing bright orange vests and will be happy to help! 🏟️"
             )
 
         model = self._get_chat_model()
@@ -339,11 +337,23 @@ class GeminiClient:
             logger.error(f"Gemini chat completion failed: {e}")
             return "I'm having a moment — please try again shortly! 🏟️"
 
+    def _mock_offline_translate(self, text: str, target_language: str) -> str:
+        """Simple dictionary-based translator for mock offline demo."""
+        from app.core.mock_translations import TRANSLATION_DICT
+        lang_dict = TRANSLATION_DICT.get(target_language)
+        if not lang_dict:
+            return text
+
+        result = text
+        for english, translation in lang_dict.items():
+            result = result.replace(english, translation)
+        return result
+
     async def translate(self, text: str, target_language: str) -> str:
         """Translate text using Gemini for nuanced stadium-context translation. Supports BudgetGuard."""
         settings = get_settings()
-        if settings.use_mock_gemini or self.budget_guard.is_exhausted():
-            return text
+        if (settings.use_mock_gemini and not settings.gemini_api_key) or self.budget_guard.is_exhausted():
+            return self._mock_offline_translate(text, target_language)
 
         model = self._get_chat_model()
         prompt = TRANSLATE_PROMPT.format(target_language=target_language, text=text)
@@ -360,7 +370,7 @@ class GeminiClient:
             return response.text.strip()
         except Exception as e:
             logger.error(f"Gemini translation failed: {e}")
-            return text  # Return original on failure
+            return self._mock_offline_translate(text, target_language)
 
     def build_fan_assistant_prompt(self, context_chunks: list[str]) -> str:
         context = "\n\n---\n\n".join(context_chunks)

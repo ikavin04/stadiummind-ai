@@ -113,10 +113,50 @@ async def get_gemini_usage():
     from app.core.gemini_client import gemini_client
     guard = gemini_client.budget_guard
     settings = get_settings()
+    effective_mock = settings.use_mock_gemini or guard.is_exhausted()
     return {
         "used": guard.get_count(),
         "limit": guard.threshold,
         "remaining": guard.get_remaining(),
         "use_mock_gemini": settings.use_mock_gemini,
-        "exhausted": guard.is_exhausted()
+        "effective_mock_mode": effective_mock,
+        "exhausted": guard.is_exhausted(),
     }
+
+
+# Runtime override — allows flipping mock mode without a server restart.
+# This is a process-level flag; resets on server restart (intentional).
+_runtime_mock_override: bool | None = None
+
+
+@app.post("/api/admin/gemini-mode")
+async def set_gemini_mode(use_mock: bool):
+    """
+    Admin/debug: toggle Gemini mock mode at runtime without restarting the server.
+    Useful for live demos. Resets on server restart.
+    Budget guard still takes precedence — if quota is exhausted, mock is always used.
+    """
+    global _runtime_mock_override
+    from app.core.gemini_client import gemini_client
+    guard = gemini_client.budget_guard
+
+    if not use_mock and guard.is_exhausted():
+        return {
+            "success": False,
+            "message": "Cannot enable real Gemini — daily budget exhausted.",
+            "effective_mock_mode": True,
+        }
+
+    _runtime_mock_override = use_mock
+    # Patch the settings object for this process
+    current_settings = get_settings()
+    current_settings.__dict__['use_mock_gemini'] = use_mock
+
+    logger.info(f"Gemini mode toggled: use_mock_gemini={use_mock} (runtime override)")
+    return {
+        "success": True,
+        "use_mock_gemini": use_mock,
+        "effective_mock_mode": use_mock or guard.is_exhausted(),
+        "budget_remaining": guard.get_remaining(),
+    }
+

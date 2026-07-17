@@ -11,6 +11,7 @@ import { SeverityBadge } from '../Badge';
 import { RoadmapCard, RoadmapModal, ROADMAP_MODULES } from '../RoadmapCard';
 import { WeatherIcon } from '../WeatherIcon';
 import { Spinner } from '../Spinner';
+import { GeminiDebugPanel } from '../GeminiDebugPanel';
 import type { Zone, DashboardAlert, RoadmapModule, MatchInfo, WeatherInfo } from '../../types';
 
 interface ManagerDashboardProps {
@@ -47,7 +48,7 @@ export function ManagerDashboard({
   const watchCount = displayAlerts.filter(a => a.severity === 'watch').length;
 
   return (
-    <div className="p-6 space-y-6 max-w-screen-2xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-6 max-w-screen-2xl mx-auto">
       {/* Roadmap modal — UI only, no backend */}
       <RoadmapModal module={roadmapModule} onClose={() => setRoadmapModule(null)} />
 
@@ -225,6 +226,12 @@ export function ManagerDashboard({
             <RoadmapCard key={mod.id} module={mod} onOpen={setRoadmapModule} />
           ))}
         </div>
+      </div>
+
+      {/* ── Admin Debug Panel — Gemini Mode Toggle (manager only) ── */}
+      <div className="pt-4 border-t border-bg-border">
+        <p className="text-[10px] font-mono text-text-muted uppercase tracking-widest mb-2">⚙ Debug · Admin Only</p>
+        <GeminiDebugPanel />
       </div>
     </div>
   );

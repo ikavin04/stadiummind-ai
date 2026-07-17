@@ -53,9 +53,9 @@ export function CrowdDetail() {
 
   return (
     <Layout wsStatus={status}>
-      <div className="p-6 space-y-6 max-w-screen-xl mx-auto">
+      <div className="p-4 sm:p-6 space-y-6 max-w-screen-xl mx-auto">
         {/* Header */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => navigate('/dashboard')}
             aria-label="Back to dashboard"
@@ -70,7 +70,7 @@ export function CrowdDetail() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Zone list */}
           <div className="space-y-2">
             <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
@@ -112,7 +112,7 @@ export function CrowdDetail() {
 
           {/* Detail panel */}
           {selectedZone ? (
-            <div className="xl:col-span-2 space-y-4">
+            <div className="lg:col-span-2 space-y-4">
               {/* Zone header */}
               <GlassCard id="crowd-detail-panel">
                 <div className="flex items-start justify-between gap-4 mb-4">
@@ -138,16 +138,18 @@ export function CrowdDetail() {
                   </h3>
                   {historyLoading && <Spinner size="sm" />}
                 </div>
-                {history ? (
-                  <CrowdChart
-                    history={history}
-                    minutesUntilFull={latestPrediction?.minutes_until_overcapacity}
-                  />
-                ) : (
-                  <div className="h-56 flex items-center justify-center">
-                    <Spinner size="lg" />
-                  </div>
-                )}
+                <div className="overflow-x-auto">
+                  {history ? (
+                    <CrowdChart
+                      history={history}
+                      minutesUntilFull={latestPrediction?.minutes_until_overcapacity}
+                    />
+                  ) : (
+                    <div className="h-56 flex items-center justify-center">
+                      <Spinner size="lg" />
+                    </div>
+                  )}
+                </div>
               </GlassCard>
 
               {/* AI Prediction */}

@@ -145,6 +145,68 @@ STOP_WORDS: frozenset[str] = frozenset({
 })
 
 
+# MOCK_TRANSLATION_MAP: maps common non-English keywords/phrases to their English equivalents
+# to enable mock-mode keyword matching to work for Spanish, French, Hindi, Arabic, and Portuguese.
+MOCK_TRANSLATION_MAP: dict[str, str] = {
+    # Where is my gate? / Gate-related
+    "entrada": "gate", "puerta": "gate", "portão": "gate", "bzwb": "gate", "bwb": "gate",
+    "bawabaty": "gate", "bawaba": "gate", "بوابتي": "gate", "بوابة": "gate", "द्वार": "gate", "गेट": "gate",
+    "porte": "gate", "accés": "gate", "access": "gate",
+    
+    # Where can I find food? / Food-related
+    "comer": "food", "comida": "food", "alimento": "food", "restaurante": "food",
+    "nourriture": "food", "repas": "food", "dîner": "food", "खाना": "food", "भोजन": "food",
+    "طعام": "food", "أكل": "food", "مطعم": "food", "refeição": "food", "cardápio": "food",
+    "tacos": "food", "empanadas": "food", "pizza": "food", "burger": "food", "concession": "food",
+    "beverage": "food", "drink": "food", "water": "food", "alcohol": "food", "beer": "food",
+    "bebida": "food", "eau": "food", "bière": "food", "पानी": "food", "पेय": "food",
+    "شراب": "food", "ماء": "food", "cerveja": "food", "agua": "food",
+    
+    # Parking information / Parking-related
+    "parking": "parking", "estacionamiento": "parking", "stationnement": "parking",
+    "पार्किंग": "parking", "वाहन": "parking", "موقف": "parking", "مواقف": "parking", "سيارات": "parking",
+    "estacionamento": "parking", "vaga": "parking", "pass": "parking", "lot": "parking",
+    "transit": "parking", "train": "parking", "bus": "parking", "nj": "parking",
+    "metro": "parking", "transport": "parking", "tren": "parking", "ट्रेन": "parking", "बस": "parking",
+    "قطار": "parking", "حافلة": "parking", "ônibus": "parking", "trem": "parking",
+    
+    # Medical help / Medical-related
+    "médica": "medical", "médico": "medical", "doctor": "medical", "paramedic": "medical",
+    "emergency": "medical", "hospital": "medical", "assistance": "medical", "help": "medical",
+    "secours": "medical", "médicale": "medical", "urgence": "medical", "चिकित्सा": "medical",
+    "डॉक्टर": "medical", "आपातकालीन": "medical", "सहायता": "medical", "طبي": "medical",
+    "طبيب": "medical", "طوارئ": "medical", "مساعدة": "medical", "socorro": "medical",
+    "emergência": "medical", "aed": "medical", "defibrillator": "medical",
+    
+    # Lost item / Lost-related
+    "perdí": "lost", "perdido": "lost", "objeto": "lost", "perdu": "lost",
+    "trouvé": "lost", "objet": "lost", "खो": "lost", "नुकसान": "lost", "समान": "lost",
+    "فقدت": "lost", "ضائع": "lost", "مفقود": "lost", "perdi": "lost", "achados": "lost",
+    "perdidos": "lost", "item": "lost", "thing": "lost", "found": "lost",
+    
+    # Match schedule / Schedule-related
+    "schedule": "schedule", "calendario": "schedule", "partidos": "schedule",
+    "calendrier": "schedule", "matchs": "schedule", "शेड्यूल": "schedule", "मैच": "schedule",
+    "सूची": "schedule", "جدول": "schedule", "مباريات": "schedule", "مباراة": "schedule",
+    "calendário": "schedule", "jogos": "schedule", "kickoff": "schedule", "time": "schedule",
+    "heure": "schedule", "समय": "schedule", "وقت": "schedule", "hora": "schedule",
+    "show": "schedule", "duration": "schedule",
+    
+    # Restrooms / Restroom-related
+    "restroom": "restrooms", "toilet": "restrooms", "bathroom": "restrooms",
+    "wc": "restrooms", "baño": "restrooms", "baños": "restrooms", "toilettes": "restrooms",
+    "douche": "restrooms", "शौचालय": "restrooms", "बाथरूम": "restrooms", "حمام": "restrooms",
+    "دورات": "restrooms", "مياه": "restrooms", "banheiro": "restrooms", "banheiros": "restrooms",
+    
+    # Policy / Rules-related
+    "policy": "policy", "rule": "policy", "prohibited": "policy", "bag": "policy",
+    "clear": "policy", "conduct": "policy", "security": "policy", "regla": "policy",
+    "bolsa": "policy", "prohibido": "policy", "sac": "policy", "interdit": "policy",
+    "n नियम": "policy", "प्रतिबंधित": "policy", "थैला": "policy", "قانون": "policy",
+    "ممنوع": "policy", "حقيبة": "policy", "proibido": "policy", "mochila": "policy",
+}
+
+
 async def retrieve_relevant_chunks(query: str, top_k: int = 4) -> list[str]:
     """
     Embed query and retrieve top-k relevant knowledge chunks via FAISS.
@@ -180,6 +242,15 @@ async def retrieve_relevant_chunks(query: str, top_k: int = 4) -> list[str]:
         import re
         query_tokens = re.sub(r"[^\w\s]", "", query.lower()).split()
         query_words = {w for w in query_tokens if w not in STOP_WORDS}
+        
+        # Translate query words to English if they are in the translation map
+        translated_query_words = set()
+        for w in query_words:
+            if w in MOCK_TRANSLATION_MAP:
+                translated_query_words.add(MOCK_TRANSLATION_MAP[w])
+            else:
+                translated_query_words.add(w)
+        query_words = query_words.union(translated_query_words)
         # Score each chunk by how many query words appear in it
         scored = [
             (

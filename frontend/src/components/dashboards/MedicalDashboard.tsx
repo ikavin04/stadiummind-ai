@@ -41,7 +41,7 @@ export function MedicalDashboard({
   const activeAlerts = alerts.filter(a => !dismissedAlerts.has(a.zone_id));
 
   return (
-    <div className="p-6 space-y-6 max-w-screen-2xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-6 max-w-screen-2xl mx-auto">
       {/* ── Page Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-bg-border pb-4">
         <div>

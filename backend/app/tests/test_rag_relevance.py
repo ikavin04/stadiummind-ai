@@ -291,7 +291,8 @@ def test_secondary_chunk_score_is_within_ratio():
 # Fallback message content (GeminiClient.chat_completion mock path)
 # ---------------------------------------------------------------------------
 
-def test_out_of_scope_triggers_graceful_fallback():
+@pytest.mark.asyncio
+async def test_out_of_scope_triggers_graceful_fallback():
     """
     End-to-end check: when context_chunks=[] AND the FAISS index is loaded,
     chat_completion must return the graceful 'I don't have specific information'
@@ -314,14 +315,11 @@ def test_out_of_scope_triggers_graceful_fallback():
         settings.gemini_budget_limit = 100
         mock_settings.return_value = settings
 
-        import asyncio
-        reply = asyncio.get_event_loop().run_until_complete(
-            client.chat_completion(
-                system_prompt="You are StadiumMind.",
-                history=[],
-                user_message="what is the meaning of life",
-                context_chunks=[],  # retrieval returned [] for out-of-scope query
-            )
+        reply = await client.chat_completion(
+            system_prompt="You are StadiumMind.",
+            history=[],
+            user_message="what is the meaning of life",
+            context_chunks=[],  # retrieval returned [] for out-of-scope query
         )
 
     assert "I don't have specific information" in reply, (
@@ -335,7 +333,8 @@ def test_out_of_scope_triggers_graceful_fallback():
     )
 
 
-def test_in_scope_does_not_trigger_fallback():
+@pytest.mark.asyncio
+async def test_in_scope_does_not_trigger_fallback():
     """A clearly in-scope query must NOT produce the out-of-scope fallback message."""
     from app.core.gemini_client import GeminiClient
 
@@ -348,14 +347,11 @@ def test_in_scope_does_not_trigger_fallback():
         mock_settings.return_value = settings
 
         parking_chunk = MOCK_METADATA[0]["content"]
-        import asyncio
-        reply = asyncio.get_event_loop().run_until_complete(
-            client.chat_completion(
-                system_prompt="You are StadiumMind.",
-                history=[],
-                user_message="where do I park",
-                context_chunks=[parking_chunk],
-            )
+        reply = await client.chat_completion(
+            system_prompt="You are StadiumMind.",
+            history=[],
+            user_message="where do I park",
+            context_chunks=[parking_chunk],
         )
 
     assert "I don't have specific information" not in reply, (
@@ -366,7 +362,8 @@ def test_in_scope_does_not_trigger_fallback():
     )
 
 
-def test_no_index_triggers_offline_fallback():
+@pytest.mark.asyncio
+async def test_no_index_triggers_offline_fallback():
     """
     When the FAISS index is not loaded (None), chat_completion with empty
     context_chunks should return the generic offline/power-saver message.
@@ -385,14 +382,11 @@ def test_no_index_triggers_offline_fallback():
         settings.use_mock_gemini = True
         mock_settings.return_value = settings
 
-        import asyncio
-        reply = asyncio.get_event_loop().run_until_complete(
-            client.chat_completion(
-                system_prompt="You are StadiumMind.",
-                history=[],
-                user_message="test",
-                context_chunks=[],
-            )
+        reply = await client.chat_completion(
+            system_prompt="You are StadiumMind.",
+            history=[],
+            user_message="test",
+            context_chunks=[],
         )
 
     assert "power-saver" in reply.lower() or "offline" in reply.lower(), (
@@ -401,3 +395,4 @@ def test_no_index_triggers_offline_fallback():
     assert "I don't have specific information" not in reply, (
         "Offline fallback should not say 'I don't have specific information'"
     )
+

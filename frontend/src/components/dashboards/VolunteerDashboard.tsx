@@ -27,14 +27,40 @@ export function VolunteerDashboard({
     { id: 5, text: 'Conduct sweep of Concourse Level 1 for any safety hazards', done: false },
   ]);
 
-  const toggleTask = (id: number) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+  // Find all zones with watch or alert severity
+  const activeAlertZones = zones.filter(z => z.severity !== 'normal');
+  const [completedDynamicTasks, setCompletedDynamicTasks] = useState<Set<string>>(new Set());
+
+  const toggleTask = (id: number | string) => {
+    if (typeof id === 'string' && id.startsWith('dynamic-')) {
+      const zoneId = id.replace('dynamic-', '');
+      setCompletedDynamicTasks(prev => {
+        const next = new Set(prev);
+        if (next.has(zoneId)) {
+          next.delete(zoneId);
+        } else {
+          next.add(zoneId);
+        }
+        return next;
+      });
+    } else {
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
+    }
   };
 
-  const completedCount = tasks.filter(t => t.done).length;
+  const dynamicTasks = activeAlertZones.map(z => ({
+    id: `dynamic-${z.id}`,
+    text: z.severity === 'alert'
+      ? `CRITICAL: Help direct crowd flow at ${z.name} (Surge Alert)`
+      : `Monitor crowd traffic at ${z.name} (Watch Status)`,
+    done: completedDynamicTasks.has(z.id),
+  }));
+
+  const allTasks = [...dynamicTasks, ...tasks];
+  const completedCount = tasks.filter(t => t.done).length + completedDynamicTasks.size;
 
   return (
-    <div className="p-6 space-y-6 max-w-screen-2xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-6 max-w-screen-2xl mx-auto">
       {/* ── Page Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-bg-border pb-4">
         <div>
@@ -81,12 +107,12 @@ export function VolunteerDashboard({
                 <h2 className="text-display text-lg font-bold text-text-primary">Shift Task List</h2>
               </div>
               <span className="text-xs font-semibold bg-accent-blue/15 text-accent-blue px-2.5 py-1 rounded-full">
-                {completedCount} of {tasks.length} Done
+                {completedCount} of {allTasks.length} Done
               </span>
             </div>
 
             <div className="space-y-3" role="group" aria-label="Task checklist">
-              {tasks.map(task => (
+              {allTasks.map(task => (
                 <button
                   key={task.id}
                   onClick={() => toggleTask(task.id)}

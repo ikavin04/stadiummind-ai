@@ -185,6 +185,8 @@ async def predict_for_zones_batch(updates: dict[str, int]) -> list[dict]:
                 "zone_id": zone_id,
                 "zone_name": zone.name,
                 "capacity": zone.capacity,
+                "occupancy_pct": occupancy_pct,
+                "current_count": current_count,
                 "recent_readings": recent_readings_formatted,
             }
 

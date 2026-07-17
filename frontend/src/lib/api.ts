@@ -105,4 +105,33 @@ export async function translateText(text: string, targetLanguage: string) {
   return res.json();
 }
 
+// ─────────────────────────────────────────
+// Admin / Debug — Gemini Mode Toggle
+// ─────────────────────────────────────────
+export async function getGeminiUsage(): Promise<{
+  used: number;
+  limit: number;
+  remaining: number;
+  use_mock_gemini: boolean;
+  effective_mock_mode: boolean;
+  exhausted: boolean;
+}> {
+  const res = await fetchWithAuth('/api/admin/gemini-usage');
+  return res.json();
+}
+
+export async function setGeminiMode(useMock: boolean): Promise<{
+  success: boolean;
+  use_mock_gemini: boolean;
+  effective_mock_mode: boolean;
+  budget_remaining: number;
+  message?: string;
+}> {
+  const res = await fetchWithAuth(`/api/admin/gemini-mode?use_mock=${useMock}`, {
+    method: 'POST',
+  });
+  return res.json();
+}
+
 export { API_BASE };
+
